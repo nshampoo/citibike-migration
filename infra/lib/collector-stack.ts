@@ -21,6 +21,10 @@ export interface CollectorStackProps extends cdk.StackProps {
 export class CollectorStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: CollectorStackProps) {
     super(scope, id, props);
+    if (60 % props.snapshotMinutes !== 0) {
+      // Snapshots must land on every hour boundary (:00) so hourly net flow is exact.
+      throw new Error(`snapshotMinutes must divide 60, got ${props.snapshotMinutes}`);
+    }
 
     // The data is the one thing we can't recreate, so the bucket survives `cdk destroy`.
     const bucket = new s3.Bucket(this, 'Data', {
@@ -47,7 +51,8 @@ export class CollectorStack extends cdk.Stack {
 
     new events.Rule(this, 'StationStatusSchedule', {
       description: `Snapshot Citi Bike station_status every ${props.snapshotMinutes} min`,
-      schedule: events.Schedule.rate(cdk.Duration.minutes(props.snapshotMinutes)),
+      // cron, not rate(): rate() counts from deploy time (:03, :08, ...); cron pins to :00, :05, ...
+      schedule: events.Schedule.cron({ minute: `0/${props.snapshotMinutes}` }),
       targets: [new targets.LambdaFunction(snapshot, {
         event: events.RuleTargetInput.fromObject({ feed: 'station_status' }),
         retryAttempts: 2,

@@ -1,12 +1,23 @@
 -- Build the tables every chart reads from. Run: duckdb data/trips.duckdb < analysis/prepare.sql
--- Expects table t (raw trips) and data/nta2020.geojson (NYC neighborhood boundaries).
+-- Expects the unzipped monthly CSVs in data/raw/ and data/nta2020.geojson (NYC neighborhood boundaries).
 INSTALL spatial; LOAD spatial;
 
--- One location per station: median of reported trip start coordinates.
+-- Station IDs must be read as text. DuckDB infers types per file, and in a file where every
+-- ID happens to look numeric it reads a DOUBLE, turning '5997.10' into '5997.1' (~1,100 trips/day
+-- lost their destination in August 2026 before this was fixed).
+CREATE OR REPLACE TABLE t AS
+SELECT * FROM read_csv('data/raw/*.csv', types = {'start_station_id': 'VARCHAR', 'end_station_id': 'VARCHAR'});
+
+-- One location per station: median of reported coordinates across trip starts and ends,
+-- so stations that only appear as a destination still get a location.
 CREATE OR REPLACE TABLE stations AS
-SELECT start_station_id AS sid, any_value(start_station_name) AS name,
-       median(start_lat) AS lat, median(start_lng) AS lng, count(*) AS trips_started
-FROM t WHERE start_station_id IS NOT NULL GROUP BY 1;
+SELECT sid, any_value(name) AS name, median(lat) AS lat, median(lng) AS lng,
+       count(*) FILTER (WHERE is_start) AS trips_started
+FROM (
+  SELECT start_station_id AS sid, start_station_name AS name, start_lat AS lat, start_lng AS lng, true AS is_start FROM t
+  UNION ALL
+  SELECT end_station_id, end_station_name, end_lat, end_lng, false FROM t
+) WHERE sid IS NOT NULL GROUP BY sid;
 
 CREATE OR REPLACE TABLE nta AS
 SELECT ntaname AS area, boroname AS borough, geom FROM ST_Read('data/nta2020.geojson');

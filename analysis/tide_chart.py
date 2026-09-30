@@ -26,7 +26,9 @@ WITH role AS (
     CASE WHEN borough <> 'Manhattan' THEN 'outer'
          WHEN sum(trip_net) FILTER (WHERE hour(hour) BETWEEN 6 AND 10 AND dayofweek(hour) BETWEEN 1 AND 5) > 0 THEN 'fills'
          ELSE 'empties' END AS zone
-  FROM hourly_net_flow GROUP BY area, borough
+  FROM hourly_net_flow
+  WHERE borough <> 'NJ'  -- NJ stations only appear as destinations here (JC trips are a separate file)
+  GROUP BY area, borough
 ),
 q AS (  -- net bikes per zone per 15 minutes per day
   SELECT r.zone, e.ts::date AS dt, dayofweek(e.ts) IN (0, 6) AS weekend,
