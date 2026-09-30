@@ -35,3 +35,12 @@ test('the builder can only read the raw bucket', () => {
   expect(actions.length).toBeGreaterThan(0);
   expect(actions.every((a: string) => a.startsWith('s3:Get') || a.startsWith('s3:List'))).toBe(true);
 });
+
+test('the builder can write only its own site folders', () => {
+  const policies = Object.values(template.findResources('AWS::IAM::Policy'));
+  const siteWrites = policies.flatMap((p: any) => p.Properties.PolicyDocument.Statement)
+    .filter((st: any) => [].concat(st.Action).some((a: string) => a.startsWith('s3:PutObject')))
+    .map((st: any) => JSON.stringify(st.Resource));
+  expect(siteWrites.some((r) => r.includes('/data/live/*'))).toBe(true);
+  expect(siteWrites.some((r) => r.includes('/data/trucks/*'))).toBe(true);
+});

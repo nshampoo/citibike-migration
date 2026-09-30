@@ -20,7 +20,7 @@ export interface SiteStackProps extends cdk.StackProps {
  *
  *   CloudFront (HTTPS) ──> site bucket (private; only CloudFront can read it)
  *                            ├─ index.html, basemap.json, data/trips/*   uploaded by `cdk deploy` from site/
- *                            └─ data/live/*                              written by the builder
+ *                            └─ data/live/*, data/trucks/*               written by the builder
  *   EventBridge (every 5 min) ──> Builder Lambda: raw bucket ──> hourly files in data/live/
  *
  * Everything in the site bucket can be rebuilt (the page from git, live data from the raw bucket),
@@ -77,7 +77,8 @@ export class SiteStack extends cdk.Stack {
       }),
     });
     props.rawBucket.grantRead(builder, 'raw/*');      // read snapshots, never write or delete them
-    site.grantReadWrite(builder, 'data/live/*');      // only its own folder of the site
+    site.grantReadWrite(builder, 'data/live/*');      // only its own folders of the site:
+    site.grantReadWrite(builder, 'data/trucks/*');    // live minutes and overnight van stops
 
     new events.Rule(this, 'BuildSchedule', {
       description: 'Pack new Citi Bike snapshots into hourly site files',

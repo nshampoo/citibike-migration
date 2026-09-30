@@ -85,7 +85,9 @@ canvas#map { position: absolute; inset: 0; width: 100%; height: 100%; display: b
 }
 .legend .bar { height: 10px; border-radius: 2px; margin: 6px 0 4px; }
 .legend .ends { display: flex; justify-content: space-between; gap: 8px; }
-.zoom { position: absolute; right: 16px; top: 14px; display: flex; flex-direction: column; gap: 4px; }
+body.trucks .zoom { right: calc(min(300px, 100% - 32px) + 28px); }
+.dotkey { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.zoom { position: absolute; right: 16px; bottom: 14px; display: flex; flex-direction: column; gap: 4px; }
 .zoom button {
   width: 34px; height: 34px; font: 600 1.05rem var(--font-body); color: var(--ink); background: var(--panel);
   border: 1px solid var(--rule); border-radius: 6px; cursor: pointer;
@@ -112,11 +114,53 @@ footer {
 .track input { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; margin: 0; accent-color: var(--ink); }
 .track .caption { position: absolute; left: 0; top: -2px; font-size: 0.7rem; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
 #speed { flex: none; font: 500 0.8rem var(--font-body); color: var(--ink-2); background: transparent; border: 1px solid var(--rule); border-radius: 6px; padding: 6px 8px; }
+.badge { font-size: 0.62rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid currentColor; border-radius: 3px; padding: 0 3px; margin-left: 5px; vertical-align: 1px; opacity: 0.8; }
+.vans {
+  position: absolute; right: 16px; top: 14px; width: min(300px, calc(100% - 32px)); max-height: calc(100% - 28px);
+  display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden;
+}
+.vans .tally { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--rule); border-bottom: 1px solid var(--rule); }
+.vans .tally div { background: var(--land); padding: 10px 12px; }
+.vans .n { font-family: var(--font-display); font-size: 2rem; font-weight: 600; line-height: 1; }
+.vans .l { font-size: 0.74rem; color: var(--ink-2); margin-top: 3px; }
+.vans .drop .n { color: var(--gain-2); } .vans .pick .n { color: var(--loss-2); }
+.vans .boro { padding: 8px 12px; border-bottom: 1px solid var(--rule); font-size: 0.76rem; color: var(--ink-2); display: grid; grid-template-columns: auto 1fr auto; gap: 3px 8px; align-items: center; }
+.vans .bar { height: 7px; position: relative; }
+.vans .bar i { position: absolute; top: 0; height: 100%; border-radius: 2px; }
+.vans .mid { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--rule); }
+.vans .head { padding: 8px 12px 4px; font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.vans ol { list-style: none; margin: 0; padding: 0 6px 8px; overflow-y: auto; flex: 1; min-height: 0; }
+.vans li { display: grid; grid-template-columns: 54px 1fr auto; gap: 6px; align-items: baseline; padding: 4px 6px; font-size: 0.78rem; border-radius: 4px; }
+.vans li .t { color: var(--muted); }
+.vans li small { display: block; color: var(--muted); font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vans li .d { font-weight: 600; } .vans li .d.drop { color: var(--gain-2); } .vans li .d.pick { color: var(--loss-2); }
+.vans .poc { font-size: 0.72rem; color: var(--ink-2); padding: 8px 12px; border-top: 1px solid var(--rule); line-height: 1.45; background: var(--land); }
+.vans .poc strong { color: var(--ink); }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--gain-2); outline-offset: 2px; }
-@media (max-width: 560px) {
-  .note { flex-basis: 100%; }
-  .legend { bottom: 10px; }
+/* Phones: nothing floats on the map except a small clock. The legend, the Trucks panel and the note
+   move into #details below the timeline (see placePanels), and the page scrolls. */
+#details { display: none; }
+@media (max-width: 640px) {
+  html, body { height: auto; }
+  body { min-height: 100%; }
+  header { padding-block: 10px; gap: 8px; }
+  h1 { font-size: 1.35rem; }
+  .controls { flex: 1 1 100%; min-width: 0; }
+  .controls > .switch:first-child { display: flex; width: 100%; }
+  .controls > .switch:first-child button { flex: 1 1 0; padding: 8px 4px; }
+  #pick { flex: 1 1 0; min-width: 0; }
+  main { flex: none; height: 60svh; min-height: 300px; touch-action: pan-y; }
+  .clock { top: 10px; left: 12px; }
+  .clock .time { font-size: 2.1rem; }
+  .clock .day { display: none; }
+  .zoom, body.trucks .zoom { top: 10px; right: 12px; bottom: auto; }
+  .zoom button { width: 30px; height: 30px; }
   #speed { display: none; }
+  #details { display: flex; flex-direction: column; gap: 12px; padding-block: 14px 28px; padding-inline: 16px; }
+  #details .legend { position: static; width: auto; }
+  #details .vans { position: static; width: auto; max-height: none; }
+  #details .vans ol { max-height: 50svh; }
+  #details .note { font-size: 0.85rem; line-height: 1.45; }
 }
 </style>
 </head>
@@ -126,13 +170,14 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   <h1>Citi Bike Tides</h1>
   <div class="controls">
     <div class="switch" role="group" aria-label="Data source">
-      <button id="src-trips" aria-pressed="true">Average weekday</button>
-      <button id="src-live" aria-pressed="false">Live</button>
+      <button id="src-live" aria-pressed="true">Live</button>
+      <button id="src-trucks" aria-pressed="false">Trucks<span class="badge" title="Proof of concept">POC</span></button>
+      <button id="src-trips" aria-pressed="false">Average weekday</button>
     </div>
     <select id="pick" aria-label="Month or day"></select>
     <div class="switch" role="group" aria-label="Live view" id="modes" hidden>
-      <button id="mode-level" aria-pressed="true">Bikes docked</button>
-      <button id="mode-change" aria-pressed="false">Last hour</button>
+      <button id="mode-level" aria-pressed="false">Bikes docked</button>
+      <button id="mode-change" aria-pressed="true">Last hour</button>
     </div>
   </div>
   <p class="note" id="note">Loading…</p>
@@ -147,6 +192,16 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
     <button id="zreset" aria-label="Reset view" title="Reset view">⟲</button>
   </div>
   <div class="legend" id="legend"></div>
+  <aside class="vans" id="vans" hidden>
+    <div class="tally">
+      <div class="drop"><div class="n" id="dropN">+0</div><div class="l" id="dropL">bikes dropped off</div></div>
+      <div class="pick"><div class="n" id="pickN">−0</div><div class="l" id="pickL">bikes picked up</div></div>
+    </div>
+    <div class="boro" id="boro"></div>
+    <div class="head">Van stops, newest first</div>
+    <ol id="vanlog"></ol>
+    <p class="poc"><strong>Proof of concept.</strong> A van stop is a station gaining or losing 8+ bikes within 10 minutes between midnight and 6 AM, when almost nobody rides. Back-to-back windows are merged. Smaller stops are missed and a few may be riders.</p>
+  </aside>
   <div class="tip" id="tip" hidden></div>
   <div class="status" id="status">Loading map…</div>
 </main>
@@ -166,10 +221,21 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   </select>
 </footer>
 
+<section id="details" aria-label="Legend and details"></section>
+
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
   const stage = $("stage"), canvas = $("map"), ctx = canvas.getContext("2d");
+
+  // On phones the legend, Trucks panel and note live below the map instead of on top of it.
+  const phone = matchMedia("(max-width: 640px)");
+  function placePanels() {
+    const legend = $("legend"), vans = $("vans"), note = $("note");
+    if (phone.matches) $("details").append(legend, vans, note);
+    else { stage.insertBefore(vans, $("tip")); stage.insertBefore(legend, vans); document.querySelector("header").append(note); }
+  }
+  phone.addEventListener("change", placePanels);
   const NY = "America/New_York";
   const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: NY, year: "numeric", month: "2-digit", day: "2-digit" });
   const hmFmt = new Intl.DateTimeFormat("en-GB", { timeZone: NY, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
@@ -179,8 +245,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   const REFRESH_MS = 5 * 60 * 1000;
   const PLAY = '<path d="M4 2l10 6-10 6z"/>', PAUSE = '<path d="M3 2h4v12H3zM9 2h4v12H9z"/>';
 
-  let basemap = null, data = null, source = "trips", liveMode = "level", pick = { trips: null, live: null };
-  let tripsIndex = { months: [] }, liveIndex = { hours: [] }, liveStations = null, liveRaw = null, refreshTimer = null;
+  let basemap = null, data = null, source = "live", liveMode = "change", pick = { trips: null, live: null, trucks: null };
+  let tripsIndex = { months: [] }, liveIndex = { hours: [] }, trucksIndex = { nights: [] };
+  let liveStations = null, liveRaw = null, refreshTimer = null;
+  const SOURCES = ["live", "trucks", "trips"];
   let frame = 39, playing = false, lastTick = 0;
   let view = { k: 1, x: 0, y: 0 };          // pan/zoom applied on top of the fitted projection
   let fit = null;                            // lon/lat -> px at zoom 1
@@ -229,6 +297,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
     const ox = (w - (x1 - x0) * cos * k) / 2, oy = (h - (y1 - y0) * k) / 2;
     fit = { k, cos, x0, y1, ox, oy, mPerPx: 111320 / k };
     pts = data.stations.map(([, lat, lng]) => project(lng, lat));
+    for (const e of data.events || []) e.p = project(e.lng, e.lat);
     cache.base = null;
   }
   function project(lng, lat) { return [fit.ox + (lng - fit.x0) * fit.cos * fit.k, fit.oy + (fit.y1 - lat) * fit.k]; }
@@ -319,6 +388,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
     if (!data || !basemap || !colors || !fit) return;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(drawBase(), 0, 0);
+    if (data.kind === "trucks") { drawTrucks(); updateClock(); drawSparkCursor(); vanPanel(); return; }
     const vals = values(frame), pos = [], neg = [];
     for (let i = 0; i < vals.length; i++) {
       const v = vals[i]; if (!v) continue;
@@ -331,6 +401,57 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
     if (data.kind === "change") ctx.drawImage(paint(heat.neg, neg, luts.loss), 0, 0, W, H);
     ctx.drawImage(paint(heat.pos, pos, luts.gain), 0, 0, W, H);
     updateClock(); drawSparkCursor();
+  }
+
+  // ---- trucks (proof of concept): van stops drawn as bursts ----
+  const vanR = (e) => (4 + Math.sqrt(Math.abs(e.delta)) * 2.6) * Math.min(2, Math.sqrt(view.k));
+  function drawTrucks() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = colors.edge;  // every station, faintly, for context
+    for (const p of pts) { const [x, y] = screen(p); ctx.fillRect(x - 0.9, y - 0.9, 1.8, 1.8); }
+    const shown = data.events.filter((e) => e.m0 <= frame);
+    for (const e of shown) {
+      const [x, y] = screen(e.p), r = vanR(e), col = e.delta > 0 ? colors.gain : colors.loss;
+      ctx.globalAlpha = 0.28; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+      ctx.globalAlpha = 0.9; ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+    const end = data.frames.length - 1;
+    for (const e of shown) {  // stops still under way (or just finished) pulse and show their count
+      const age = frame - e.m0;
+      if (frame >= end || age > e.m1 - e.m0 + 25) continue;
+      const [x, y] = screen(e.p), r = vanR(e), col = e.delta > 0 ? colors.gain : colors.loss, u = (age % 12) / 12;
+      ctx.globalAlpha = (1 - u) * 0.8; ctx.strokeStyle = col; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, r + u * 22, 0, 7); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.fillStyle = colors.ink; ctx.font = `600 13px ${css("--font-body")}`; ctx.textAlign = "center";
+      ctx.fillText(`${e.delta > 0 ? "+" : "−"}${Math.abs(e.delta)}`, x, y - r - 6);
+    }
+    ctx.globalAlpha = 1;
+  }
+  let vanCount = -1;
+  function vanPanel(force) {
+    const shown = data.events.filter((e) => e.m0 <= frame);
+    if (shown.length === vanCount && !force) return;
+    vanCount = shown.length;
+    const drops = shown.filter((e) => e.delta > 0), picks = shown.filter((e) => e.delta < 0);
+    const sum = (a) => a.reduce((n, e) => n + Math.abs(e.delta), 0), stops = (n) => `${n} stop${n === 1 ? "" : "s"}`;
+    $("dropN").textContent = `+${sum(drops)}`; $("dropL").textContent = `bikes dropped off at ${stops(drops.length)}`;
+    $("pickN").textContent = `−${sum(picks)}`; $("pickL").textContent = `bikes picked up at ${stops(picks.length)}`;
+    const boros = [...new Set(data.events.map((e) => e.borough))].filter(Boolean);
+    const by = (b) => [sum(drops.filter((e) => e.borough === b)), sum(picks.filter((e) => e.borough === b))];
+    const max = Math.max(1, ...boros.flatMap(by));
+    $("boro").innerHTML = boros.map((b) => {
+      const [d, pk] = by(b), net = d - pk;
+      return `<span>${b}</span><div class="bar"><span class="mid"></span><i style="right:50%;width:${(pk / max) * 50}%;background:var(--loss-2)"></i><i style="left:50%;width:${(d / max) * 50}%;background:var(--gain-2)"></i></div><span>${net > 0 ? "+" : net < 0 ? "−" : ""}${Math.abs(net)}</span>`;
+    }).join("");
+    const log = $("vanlog"); log.innerHTML = "";
+    for (const e of [...shown].reverse()) {
+      const li = document.createElement("li"), { t, ampm } = fmt(data.times[e.m0]);
+      li.innerHTML = `<span class="t">${t} ${ampm}</span><span class="nm"></span><span class="d ${e.delta > 0 ? "drop" : "pick"}">${e.delta > 0 ? "+" : "−"}${Math.abs(e.delta)}</span>`;
+      li.querySelector(".nm").textContent = e.name;
+      const small = document.createElement("small"); small.textContent = e.area || ""; li.querySelector(".nm").append(small);
+      log.append(li);
+    }
+    if (!shown.length) log.innerHTML = `<li><span></span><span class="nm">${data.events.length ? "Press play to watch the night." : "No van stops detected yet."}</span></li>`;
   }
 
   // ---- clock, legend, sparkline ----
@@ -348,6 +469,11 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   function drawLegend() {
     if (!data || !colors) return;
     const n = Math.round(scale);
+    if (data.kind === "trucks") {
+      $("legend").innerHTML = `<strong style="color:var(--ink)">Overnight van stops</strong>
+        <div class="ends" style="margin-top:6px"><span><i class="dotkey" style="background:var(--gain-2)"></i>Dropped off</span><span><i class="dotkey" style="background:var(--loss-2)"></i>Picked up</span></div>`;
+      return;
+    }
     $("legend").innerHTML = data.kind === "change"
       ? `<strong style="color:var(--ink)">${data.legendTitle}</strong>
          <div class="bar" style="background:linear-gradient(90deg,var(--loss-3),var(--loss-2),var(--loss-1) 45%,var(--land) 50%,var(--gain-1) 55%,var(--gain-2),var(--gain-3))"></div>
@@ -362,6 +488,18 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
     const c = $("spark"), w = c.clientWidth, h = c.clientHeight;
     c.width = w * dpr; c.height = h * dpr;
     const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (data.kind === "trucks") {  // bikes moved per 15 minutes: drop-offs above the line, pickups below
+      $("sparkcap").textContent = "Bikes moved by vans, per 15 min";
+      const bins = 24, up = new Array(bins).fill(0), dn = new Array(bins).fill(0);
+      for (const e of data.events) (e.delta > 0 ? up : dn)[Math.min(bins - 1, Math.floor(e.m0 / 15))] += Math.abs(e.delta);
+      const max = Math.max(1, ...up, ...dn), top = 12, mid = top + (h - top) / 2, half = (h - top) / 2 - 1, bw = w / bins;
+      for (let i = 0; i < bins; i++) {
+        g.fillStyle = colors.gain; g.fillRect(i * bw + 1, mid - (up[i] / max) * half, bw - 2, (up[i] / max) * half);
+        g.fillStyle = colors.loss; g.fillRect(i * bw + 1, mid + 1, bw - 2, (dn[i] / max) * half);
+      }
+      cache.spark = g.getImageData(0, 0, c.width, c.height);
+      return;
+    }
     sparkVals = data.frames.map((f) => f.reduce((s, v) => s + v, 0) * data.spark.sign);
     $("sparkcap").textContent = data.spark.label;
     let lo = Infinity, hi = -Infinity;
@@ -391,19 +529,25 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
     playing = p;
     $("playicon").innerHTML = p ? PAUSE : PLAY;
     $("play").setAttribute("aria-label", p ? "Pause" : "Play");
-    if (p) { lastTick = performance.now(); requestAnimationFrame(tick); }
+    if (p) {
+      if (data && frame >= data.frames.length - 1.01) frame = 0;  // at the end: play from the start
+      vanCount = -1; lastTick = performance.now(); requestAnimationFrame(tick);
+    }
   }
   function tick(now) {
     if (!playing) return;
-    const perSec = (source === "trips" ? 4 : 20) * Number($("speed").value);  // frames per second
+    const perSec = ({ trips: 4, trucks: 12, live: 20 })[source] * Number($("speed").value);  // frames per second
     // At most one data frame per drawn frame: a slow screen plays slower instead of skipping minutes.
     frame += Math.min(1, ((now - lastTick) / 1000) * perSec); lastTick = now;
-    if (frame >= data.frames.length - 1) frame = 0;
+    if (frame >= data.frames.length - 1) {
+      if (source === "trucks") { frame = data.frames.length - 1; draw(); setPlaying(false); return; }  // a night ends at 6 AM
+      frame = 0;
+    }
     draw();
     requestAnimationFrame(tick);
   }
   $("play").addEventListener("click", () => setPlaying(!playing));
-  $("scrub").addEventListener("input", (e) => { frame = Number(e.target.value); requestDraw(); });
+  $("scrub").addEventListener("input", (e) => { frame = Number(e.target.value); vanCount = -1; requestDraw(); });
   document.addEventListener("keydown", (e) => {
     if (e.target.tagName === "SELECT") return;
     if (e.code === "Space" && e.target.tagName !== "BUTTON") { e.preventDefault(); setPlaying(!playing); }
@@ -451,6 +595,26 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   // ---- hover ----
   function hover(mx, my) {
     if (!data) return;
+    if (data.kind === "trucks") {
+      let best = null, bd = Infinity;
+      for (const e of data.events) {
+        if (e.m0 > frame) continue;
+        const [x, y] = screen(e.p), d = Math.hypot(x - mx, y - my);
+        if (d < vanR(e) + 4 && d < bd) { bd = d; best = e; }
+      }
+      const tip = $("tip");
+      if (!best) { tip.hidden = true; return; }
+      const a = fmt(data.times[best.m0]), b = fmt(data.times[Math.min(best.m1, data.times.length - 1)]);
+      tip.innerHTML = "<b></b><span></span><span></span>";
+      tip.children[0].textContent = best.name;
+      tip.children[1].textContent = `${best.area ? best.area + " · " : ""}${a.t}–${b.t} ${b.ampm}`;
+      tip.children[2].textContent = `${best.before} → ${best.after} bikes (${best.delta > 0 ? "+" : "−"}${Math.abs(best.delta)})`;
+      for (const el of tip.querySelectorAll("span")) el.style.display = "block";
+      tip.hidden = false;
+      tip.style.left = Math.min(mx + 14, W - tip.offsetWidth - 8) + "px";
+      tip.style.top = Math.max(8, my - tip.offsetHeight - 10) + "px";
+      return;
+    }
     let best = -1, bd = 14 * 14;
     for (let i = 0; i < pts.length; i++) {
       const [x, y] = screen(pts[i]), d = (x - mx) ** 2 + (y - my) ** 2;
@@ -483,16 +647,18 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
     return all[Math.floor(all.length * p)] || 1;
   }
 
-  // Stations are kept only if they sit on the NYC land we draw (drops Jersey City, which has no base map).
+  // Which drawn area (neighborhood, or Jersey City / Hoboken) a point falls in; stations outside every
+  // area are dropped since there's no land drawn under them.
   let landBoxes = null;
-  function onLand(lng, lat) {
+  function onLand(lng, lat) { return !!areaOf(lng, lat); }
+  function areaOf(lng, lat) {
     if (!landBoxes) landBoxes = basemap.map((f) => {
       const polys = f.type === "Polygon" ? [f.coordinates] : f.coordinates;
       let b = [Infinity, Infinity, -Infinity, -Infinity];
       for (const poly of polys) for (const [x, y] of poly[0]) b = [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x), Math.max(b[3], y)];
-      return { polys, b };
+      return { polys, b, f };
     });
-    for (const { polys, b } of landBoxes) {
+    for (const { polys, b, f } of landBoxes) {
       if (lng < b[0] || lng > b[2] || lat < b[1] || lat > b[3]) continue;
       for (const poly of polys) {
         let inside = false;
@@ -500,10 +666,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
           const [xa, ya] = ring[a], [xz, yz] = ring[z];
           if ((ya > lat) !== (yz > lat) && lng < ((xz - xa) * (lat - ya)) / (yz - ya) + xa) inside = !inside;
         }
-        if (inside) return true;
+        if (inside) return f;
       }
     }
-    return false;
+    return null;
   }
 
   async function loadTrips(month) {
@@ -581,11 +747,42 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   }
   function hmLabel(ts) { const { t, ampm } = fmt(hmFmt.format(new Date(ts * 1000))); return `${t} ${ampm}`; }
 
+  async function loadTrucks(night, fresh) {
+    const d = await getJSON(`data/trucks/${night}.json`, fresh);
+    if (!liveStations || fresh) liveStations = await getJSON("data/live/stations.json", fresh);
+    const stations = Object.values(liveStations).filter((s) => onLand(s[2], s[1]));
+    const events = d.events.map((e) => {
+      const f = areaOf(e.lng, e.lat);
+      return { ...e, area: f ? f.area : "", borough: f ? f.borough : "" };  // blank if just outside the simplified outlines
+    });
+    const nice = longDay.format(new Date(`${night}T12:00:00Z`));
+    const through = d.complete ? "" : ` So far: through ${hmLabel(d.through)}; updates every 5 minutes until 6 AM.`;
+    return {
+      kind: "trucks", events, stations,
+      times: Array.from({ length: 361 }, (_, m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`),
+      frames: Array.from({ length: 361 }, () => []),
+      dayLabel: `Trucks · night of ${nice}`,
+      note: `Proof of concept: Lyft's vans restocking stations between midnight and 6 AM, spotted as sudden jumps in 1-minute snapshots.${through}`,
+      // minutes after local midnight covered so far (midnight in UTC = UTC midnight minus the offset)
+      through: d.complete ? 360 : d.through ? Math.min(360, Math.max(0, Math.floor((d.through - (hourStart(`${night}T00`) - nyOffset(night) * 3600)) / 60))) : 0,
+    };
+  }
+  // New York's UTC offset at the start of a night (hours): -4 in daylight time, else -5. Same rule and
+  // same instant (05:00 UTC, about midnight local) as the builder, so the two agree on DST-change nights.
+  function nyOffset(day) {
+    const y = +day.slice(0, 4), at = Date.UTC(y, +day.slice(5, 7) - 1, +day.slice(8, 10), 5);
+    const march = new Date(Date.UTC(y, 2, 8, 7)), nov = new Date(Date.UTC(y, 10, 1, 6));
+    const start = march.getTime() + ((7 - march.getUTCDay()) % 7) * 864e5, end = nov.getTime() + ((7 - nov.getUTCDay()) % 7) * 864e5;
+    return at >= start && at < end ? -4 : -5;
+  }
+
   function fillPicker() {
     const sel = $("pick");
     const opts = source === "trips"
       ? tripsIndex.months.map((m) => [m, new Date(`${m}-15T12:00:00Z`).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" })])
-      : [...new Set(liveIndex.hours.map((h) => nyDay(hourStart(h))))].reverse().map((d) => [d, longDay.format(new Date(`${d}T12:00:00Z`))]);
+      : source === "trucks"
+        ? trucksIndex.nights.map((d) => [d, `Night of ${longDay.format(new Date(`${d}T12:00:00Z`))}`])
+        : [...new Set(liveIndex.hours.map((h) => nyDay(hourStart(h))))].reverse().map((d) => [d, longDay.format(new Date(`${d}T12:00:00Z`))]);
     sel.innerHTML = "";
     for (const [v, label] of opts) sel.add(new Option(label, v));
     sel.value = pick[source] || (opts[0] && opts[0][0]) || "";
@@ -598,8 +795,12 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
     $("note").textContent = data.note;
     $("scrub").max = data.frames.length - 1;
     scale = Math.max(5, percentile(data.frames, 0.97));
+    vanCount = -1;
+    $("vans").hidden = data.kind !== "trucks";
+    document.body.classList.toggle("trucks", data.kind === "trucks");
     if (!keepFrame) {
-      frame = source === "trips" ? Math.max(0, data.times.indexOf("10:00")) : data.frames.length - 1;
+      frame = source === "trips" ? Math.max(0, data.times.indexOf("10:00"))
+            : source === "trucks" ? data.through : data.frames.length - 1;
       view = { k: 1, x: 0, y: 0 };
     } else if (atEnd) frame = data.frames.length - 1;
     frame = Math.min(frame, data.frames.length - 1);
@@ -611,22 +812,32 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   async function select(name, value, { fresh = false, keepFrame = false } = {}) {
     if (!keepFrame) setPlaying(false);
     source = name;
-    for (const k of ["trips", "live"]) $("src-" + k).setAttribute("aria-pressed", String(k === name));
+    for (const k of SOURCES) $("src-" + k).setAttribute("aria-pressed", String(k === name));
     $("modes").hidden = name !== "live";
     clearInterval(refreshTimer);
     try {
       if (name === "live" && (fresh || !liveIndex.hours.length)) liveIndex = await getJSON("data/live/index.json", true).catch(() => ({ hours: [] }));
+      if (name === "trucks" && (fresh || !trucksIndex.nights.length)) trucksIndex = await getJSON("data/trucks/index.json", true).catch(() => ({ nights: [] }));
       fillPicker();
       pick[name] = value || $("pick").value;
       if (!pick[name]) {
         $("status").hidden = false;
-        $("status").textContent = name === "live" ? "No live data yet. The collector saves a snapshot every minute; check back in a few minutes." : "No trip months exported yet.";
+        $("status").textContent = ({
+          live: "No live data yet. The collector saves a snapshot every minute; check back in a few minutes.",
+          trucks: "No nights analyzed yet. Van stops appear after midnight, New York time.",
+          trips: "No trip months exported yet.",
+        })[name];
         return;
       }
       $("pick").value = pick[name];
       if (!keepFrame) { $("status").hidden = false; $("status").textContent = "Loading…"; }
       if (name === "trips") show(await loadTrips(pick.trips), keepFrame);
-      else {
+      else if (name === "trucks") {
+        const d = await loadTrucks(pick.trucks, fresh);
+        show(d, keepFrame);
+        if (d.through < 360)  // tonight, still under way: pick up new stops every 5 min
+          refreshTimer = setInterval(() => select("trucks", pick.trucks, { fresh: true, keepFrame: true }), REFRESH_MS);
+      } else {
         liveRaw = await loadLiveDay(pick.live, fresh);
         show(liveView(), keepFrame);
         if (pick.live === nyDay(Date.now() / 1000))  // today: pull new minutes every 5 min
@@ -637,8 +848,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
       $("status").textContent = `Couldn't load that data (${err.message}). Reload the page to try again.`;
     }
   }
-  $("src-trips").addEventListener("click", () => select("trips", pick.trips));
-  $("src-live").addEventListener("click", () => select("live", pick.live));
+  for (const k of SOURCES) $("src-" + k).addEventListener("click", () => select(k, pick[k]));
   $("pick").addEventListener("change", (e) => select(source, e.target.value));
   for (const m of ["level", "change"]) $("mode-" + m).addEventListener("click", () => {
     liveMode = m;
@@ -653,8 +863,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
       $("status").textContent = "Couldn't load the base map. Reload the page to try again.";
       return;
     }
-    readTheme(); resize();
-    await select(location.hash === "#live" ? "live" : "trips");
+    placePanels(); readTheme(); resize();
+    const want = { "#trucks": "trucks", "#weekday": "trips", "#live": "live" }[location.hash] || "live";
+    await select(want);
+    if (want === "live" && !pick.live) await select("trips");  // nothing collected yet: show the average
   })();
 })();
 </script>
