@@ -19,6 +19,9 @@ export interface CollectorStackProps extends cdk.StackProps {
  *   EventBridge rule (daily)       ──> Lambda ──> s3://<bucket>/raw/station_information/dt=.../*.json.gz
  */
 export class CollectorStack extends cdk.Stack {
+  /** Raw snapshots. Other stacks (the site) read from it. */
+  public readonly bucket: s3.IBucket;
+
   constructor(scope: Construct, id: string, props: CollectorStackProps) {
     super(scope, id, props);
     if (60 % props.snapshotMinutes !== 0) {
@@ -48,6 +51,7 @@ export class CollectorStack extends cdk.Stack {
       }),
     });
     bucket.grantPut(snapshot); // write-only: the function can't read or delete data
+    this.bucket = bucket;
 
     new events.Rule(this, 'StationStatusSchedule', {
       description: `Snapshot Citi Bike station_status every ${props.snapshotMinutes} min`,

@@ -1,4 +1,10 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Citi Bike Tides</title>
+<meta name="description" content="Where Citi Bike stations gain and lose bikes across New York City, animated through the day.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Public+Sans:wght@400;500;600&display=swap">
@@ -19,6 +25,7 @@
   --spark: #9aa3a8;
   --font-display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
   --font-body: "Public Sans", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -42,6 +49,7 @@
 }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
+body { margin: 0; }
 body {
   background: var(--water); color: var(--ink); font-family: var(--font-body);
   font-variant-numeric: tabular-nums; display: flex; flex-direction: column;
@@ -59,6 +67,8 @@ h1 { font-family: var(--font-display); font-weight: 600; font-size: 1.6rem; lett
 }
 .switch button[aria-pressed="true"] { background: var(--ink); color: var(--land); }
 .switch button + button { border-left: 1px solid var(--rule); }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+#pick { font: 500 0.85rem var(--font-body); color: var(--ink); background: var(--land); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 8px; max-width: 100%; }
 main { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; cursor: grab; }
 main.dragging { cursor: grabbing; }
 canvas#map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -100,7 +110,7 @@ footer {
 .track { position: relative; flex: 1; min-width: 0; height: 44px; }
 .track canvas { position: absolute; inset: 0 0 12px 0; width: 100%; height: 32px; }
 .track input { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; margin: 0; accent-color: var(--ink); }
-.track .caption { position: absolute; right: 0; top: -2px; font-size: 0.7rem; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.track .caption { position: absolute; left: 0; top: -2px; font-size: 0.7rem; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
 #speed { flex: none; font: 500 0.8rem var(--font-body); color: var(--ink-2); background: transparent; border: 1px solid var(--rule); border-radius: 6px; padding: 6px 8px; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--gain-2); outline-offset: 2px; }
 @media (max-width: 560px) {
@@ -109,12 +119,21 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   #speed { display: none; }
 }
 </style>
+</head>
+<body>
 
 <header>
   <h1>Citi Bike Tides</h1>
-  <div class="switch" role="group" aria-label="Data source">
-    <button id="src-trips" aria-pressed="true">Average weekday</button>
-    <button id="src-live" aria-pressed="false">Live snapshots</button>
+  <div class="controls">
+    <div class="switch" role="group" aria-label="Data source">
+      <button id="src-trips" aria-pressed="true">Average weekday</button>
+      <button id="src-live" aria-pressed="false">Live</button>
+    </div>
+    <select id="pick" aria-label="Month or day"></select>
+    <div class="switch" role="group" aria-label="Live view" id="modes" hidden>
+      <button id="mode-level" aria-pressed="true">Bikes docked</button>
+      <button id="mode-change" aria-pressed="false">Change</button>
+    </div>
   </div>
   <p class="note" id="note">Loading…</p>
 </header>
@@ -151,10 +170,17 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 (() => {
   const $ = (id) => document.getElementById(id);
   const stage = $("stage"), canvas = $("map"), ctx = canvas.getContext("2d");
-  const SOURCES = { trips: "trips_weekday.json", live: "live.json" };
+  const NY = "America/New_York";
+  const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: NY, year: "numeric", month: "2-digit", day: "2-digit" });
+  const hmFmt = new Intl.DateTimeFormat("en-GB", { timeZone: NY, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const longDay = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
+  const nyDay = (s) => dayFmt.format(new Date(s * 1000));                       // epoch s -> "2026-09-30" in NYC
+  const hourStart = (h) => Date.UTC(+h.slice(0, 4), +h.slice(5, 7) - 1, +h.slice(8, 10), +h.slice(11, 13)) / 1000;
+  const REFRESH_MS = 5 * 60 * 1000;
   const PLAY = '<path d="M4 2l10 6-10 6z"/>', PAUSE = '<path d="M3 2h4v12H3zM9 2h4v12H9z"/>';
 
-  let basemap = null, data = null, source = "trips";
+  let basemap = null, data = null, source = "trips", liveMode = "level", pick = { trips: null, live: null };
+  let tripsIndex = { months: [] }, liveIndex = { hours: [] }, liveStations = null, liveRaw = null, refreshTimer = null;
   let frame = 39, playing = false, lastTick = 0;
   let view = { k: 1, x: 0, y: 0 };          // pan/zoom applied on top of the fitted projection
   let fit = null;                            // lon/lat -> px at zoom 1
@@ -309,14 +335,14 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   function updateClock() {
     const { t, ampm } = fmt(data.times[Math.min(Math.round(frame), data.times.length - 1)]);
     $("time").innerHTML = `${t}<span class="ampm">${ampm}</span>`;
-    $("day").textContent = data.kind === "change" ? "Weekday average · Aug 2026" : data.title.replace(/^Live, /, "Live · ");
+    $("day").textContent = data.dayLabel;
     $("scrub").value = frame;
   }
   function drawLegend() {
     if (!data || !colors) return;
     const n = Math.round(scale);
     $("legend").innerHTML = data.kind === "change"
-      ? `<strong style="color:var(--ink)">Bikes gained or lost since midnight</strong>
+      ? `<strong style="color:var(--ink)">${data.legendTitle}</strong>
          <div class="bar" style="background:linear-gradient(90deg,var(--loss-3),var(--loss-2),var(--loss-1) 45%,var(--land) 50%,var(--gain-1) 55%,var(--gain-2),var(--gain-3))"></div>
          <div class="ends"><span>Emptying: ${n}+ lost</span><span>Filling: ${n}+ gained</span></div>`
       : `<strong style="color:var(--ink)">Bikes docked at each station</strong>
@@ -329,9 +355,11 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
     const c = $("spark"), w = c.clientWidth, h = c.clientHeight;
     c.width = w * dpr; c.height = h * dpr;
     const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    sparkVals = data.frames.map((f) => f.reduce((s, v) => s + v, 0) * (data.kind === "change" ? -1 : 1));
-    $("sparkcap").textContent = data.kind === "change" ? "Bikes out on rides" : "Bikes docked citywide";
-    const lo = data.kind === "change" ? 0 : Math.min(...sparkVals), hi = Math.max(...sparkVals);
+    sparkVals = data.frames.map((f) => f.reduce((s, v) => s + v, 0) * data.spark.sign);
+    $("sparkcap").textContent = data.spark.label;
+    let lo = Infinity, hi = -Infinity;
+    for (const v of sparkVals) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    if (data.kind === "change") lo = Math.min(lo, 0);
     const X = (i) => (i / (sparkVals.length - 1)) * w, Y = (v) => h - 2 - ((v - lo) / (hi - lo || 1)) * (h - 6);
     g.beginPath(); g.moveTo(0, h);
     sparkVals.forEach((v, i) => g.lineTo(X(i), Y(v)));
@@ -360,7 +388,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   }
   function tick(now) {
     if (!playing) return;
-    const perSec = (data.kind === "change" ? 4 : 10) * Number($("speed").value);  // frames per second
+    const perSec = (source === "trips" ? 4 : 20) * Number($("speed").value);  // frames per second
     frame += ((now - lastTick) / 1000) * perSec; lastTick = now;
     if (frame >= data.frames.length - 1) frame = 0;
     draw();
@@ -424,7 +452,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
     if (best < 0) { tip.hidden = true; return; }
     const v = values(frame)[best], n = Math.round(v);
     const text = data.kind === "change"
-      ? (n === 0 ? "No net change since midnight" : `${n > 0 ? "+" : "−"}${Math.abs(n)} bikes since midnight`)
+      ? (n === 0 ? `No net change ${data.since}` : `${n > 0 ? "+" : "−"}${Math.abs(n)} bikes ${data.since}`)
       : `${n} bike${n === 1 ? "" : "s"} docked`;
     tip.innerHTML = `<b></b><span></span>`;
     tip.querySelector("b").textContent = data.stations[best][0];
@@ -435,50 +463,167 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   }
 
   // ---- loading ----
-  async function load(name) {
-    if (!cache[name]) {
-      const res = await fetch(SOURCES[name]);
-      if (!res.ok) throw new Error(`${SOURCES[name]} returned ${res.status}`);
-      cache[name] = await res.json();
-    }
-    return cache[name];
+  async function getJSON(url, fresh = false) {
+    const res = await fetch(url, fresh ? { cache: "no-cache" } : {});
+    if (!res.ok) throw new Error(`${url} returned ${res.status}`);
+    return res.json();
   }
-  function percentile(arrs, p) {
-    const all = [];
-    for (const f of arrs) for (const v of f) if (v) all.push(Math.abs(v));
+  function percentile(arrs, p) {  // sampled: live days can hold millions of values
+    const all = [], step = Math.max(1, Math.floor(arrs.length / 120));
+    for (let f = 0; f < arrs.length; f += step) for (const v of arrs[f]) if (v) all.push(Math.abs(v));
     all.sort((a, b) => a - b);
     return all[Math.floor(all.length * p)] || 1;
   }
-  async function useSource(name) {
-    setPlaying(false);
-    $("status").hidden = false; $("status").textContent = "Loading…";
-    try {
-      data = await load(name); source = name;
-      for (const k of ["trips", "live"]) $("src-" + k).setAttribute("aria-pressed", String(k === name));
-      $("note").textContent = data.note;
-      $("scrub").max = data.frames.length - 1;
-      scale = Math.max(5, percentile(data.frames, 0.97));
-      frame = name === "trips" ? data.times.indexOf("10:00") : data.frames.length - 1;
+
+  // Stations are kept only if they sit on the NYC land we draw (drops Jersey City, which has no base map).
+  let landBoxes = null;
+  function onLand(lng, lat) {
+    if (!landBoxes) landBoxes = basemap.map((f) => {
+      const polys = f.type === "Polygon" ? [f.coordinates] : f.coordinates;
+      let b = [Infinity, Infinity, -Infinity, -Infinity];
+      for (const poly of polys) for (const [x, y] of poly[0]) b = [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x), Math.max(b[3], y)];
+      return { polys, b };
+    });
+    for (const { polys, b } of landBoxes) {
+      if (lng < b[0] || lng > b[2] || lat < b[1] || lat > b[3]) continue;
+      for (const poly of polys) {
+        let inside = false;
+        for (const ring of poly) for (let a = 0, z = ring.length - 1; a < ring.length; z = a++) {
+          const [xa, ya] = ring[a], [xz, yz] = ring[z];
+          if ((ya > lat) !== (yz > lat) && lng < ((xz - xa) * (lat - ya)) / (yz - ya) + xa) inside = !inside;
+        }
+        if (inside) return true;
+      }
+    }
+    return false;
+  }
+
+  async function loadTrips(month) {
+    const d = await getJSON(`data/trips/${month}.json`);
+    const label = new Date(`${month}-15T12:00:00Z`).toLocaleString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+    return { ...d, dayLabel: `Weekday average · ${label}`, legendTitle: "Bikes gained or lost since midnight",
+             since: "since midnight", spark: { label: "Bikes out on rides", sign: -1 } };
+  }
+
+  // A live day = every hourly file whose start falls on that NYC date, stitched minute by minute.
+  const hourCache = {};
+  async function loadLiveDay(day, fresh) {
+    const hours = liveIndex.hours.filter((h) => nyDay(hourStart(h)) === day);
+    const last = hours[hours.length - 1];
+    const docs = await Promise.all(hours.map(async (h) => {
+      if (!hourCache[h] || (fresh && h === last)) hourCache[h] = await getJSON(`data/live/hours/${h}.json`, fresh && h === last);
+      return hourCache[h];
+    }));
+    if (!liveStations || fresh) liveStations = await getJSON("data/live/stations.json", fresh);
+    const ids = Object.keys(liveStations).filter((id) => onLand(liveStations[id][2], liveStations[id][1]));
+    const times = [], frames = [];
+    for (const doc of docs) doc.times.forEach((ts, t) => {
+      const prev = frames[frames.length - 1];
+      frames.push(ids.map((id, i) => doc.bikes[id]?.[t] ?? (prev ? prev[i] : null)));
+      times.push(ts);
+    });
+    ids.forEach((id, i) => {  // a station missing at the start of the day takes its first known count
+      const first = frames.find((f) => f[i] != null);
+      for (const f of frames) { if (f[i] != null) break; f[i] = first ? first[i] : 0; }
+    });
+    return { ids, times, frames, day };
+  }
+  function liveView() {
+    const { ids, times, frames, day } = liveRaw;
+    const change = liveMode === "change", start = hmLabel(times[0]);
+    const nice = longDay.format(new Date(`${day}T12:00:00Z`));
+    const mins = Math.round((Date.now() / 1000 - times[times.length - 1]) / 60);
+    return {
+      kind: change ? "change" : "level",
+      times: times.map((ts) => hmFmt.format(new Date(ts * 1000))),
+      stations: ids.map((id) => liveStations[id]),
+      frames: change ? frames.map((f) => f.map((v, i) => v - frames[0][i])) : frames,
+      dayLabel: `Live · ${nice}`,
+      legendTitle: `Bikes gained or lost since ${start}`,
+      since: `since ${start}`,
+      spark: change ? { label: `Bikes away from docks vs. ${start}`, sign: -1 } : { label: "Bikes docked citywide", sign: 1 },
+      note: `${times.length} one-minute snapshots from ${start} to ${hmLabel(times[times.length - 1])}` +
+            (mins <= 15 ? `, updated ${mins <= 1 ? "just now" : `${mins} min ago`}.` : "."),
+    };
+  }
+  function hmLabel(ts) { const { t, ampm } = fmt(hmFmt.format(new Date(ts * 1000))); return `${t} ${ampm}`; }
+
+  function fillPicker() {
+    const sel = $("pick");
+    const opts = source === "trips"
+      ? tripsIndex.months.map((m) => [m, new Date(`${m}-15T12:00:00Z`).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" })])
+      : [...new Set(liveIndex.hours.map((h) => nyDay(hourStart(h))))].reverse().map((d) => [d, longDay.format(new Date(`${d}T12:00:00Z`))]);
+    sel.innerHTML = "";
+    for (const [v, label] of opts) sel.add(new Option(label, v));
+    sel.value = pick[source] || (opts[0] && opts[0][0]) || "";
+    sel.hidden = !opts.length;
+  }
+
+  function show(next, keepFrame) {
+    const atEnd = data && frame >= data.frames.length - 1.01;
+    data = next;
+    $("note").textContent = data.note;
+    $("scrub").max = data.frames.length - 1;
+    scale = Math.max(5, percentile(data.frames, 0.97));
+    if (!keepFrame) {
+      frame = source === "trips" ? Math.max(0, data.times.indexOf("10:00")) : data.frames.length - 1;
       view = { k: 1, x: 0, y: 0 };
-      fitProjection(); drawLegend(); drawSpark();
-      $("status").hidden = true;
-      requestDraw();
+    } else if (atEnd) frame = data.frames.length - 1;
+    frame = Math.min(frame, data.frames.length - 1);
+    fitProjection(); drawLegend(); drawSpark();
+    $("status").hidden = true;
+    requestDraw();
+  }
+
+  async function select(name, value, { fresh = false, keepFrame = false } = {}) {
+    if (!keepFrame) setPlaying(false);
+    source = name;
+    for (const k of ["trips", "live"]) $("src-" + k).setAttribute("aria-pressed", String(k === name));
+    $("modes").hidden = name !== "live";
+    clearInterval(refreshTimer);
+    try {
+      if (name === "live" && (fresh || !liveIndex.hours.length)) liveIndex = await getJSON("data/live/index.json", true).catch(() => ({ hours: [] }));
+      fillPicker();
+      pick[name] = value || $("pick").value;
+      if (!pick[name]) {
+        $("status").hidden = false;
+        $("status").textContent = name === "live" ? "No live data yet. The collector saves a snapshot every minute; check back in a few minutes." : "No trip months exported yet.";
+        return;
+      }
+      $("pick").value = pick[name];
+      if (!keepFrame) { $("status").hidden = false; $("status").textContent = "Loading…"; }
+      if (name === "trips") show(await loadTrips(pick.trips), keepFrame);
+      else {
+        liveRaw = await loadLiveDay(pick.live, fresh);
+        show(liveView(), keepFrame);
+        if (pick.live === nyDay(Date.now() / 1000))  // today: pull new minutes every 5 min
+          refreshTimer = setInterval(() => select("live", pick.live, { fresh: true, keepFrame: true }), REFRESH_MS);
+      }
     } catch (err) {
-      $("status").textContent = `Couldn't load the ${name === "trips" ? "weekday" : "live"} data (${err.message}). Reload the page to try again.`;
+      $("status").hidden = false;
+      $("status").textContent = `Couldn't load that data (${err.message}). Reload the page to try again.`;
     }
   }
-  $("src-trips").addEventListener("click", () => useSource("trips"));
-  $("src-live").addEventListener("click", () => useSource("live"));
+  $("src-trips").addEventListener("click", () => select("trips", pick.trips));
+  $("src-live").addEventListener("click", () => select("live", pick.live));
+  $("pick").addEventListener("change", (e) => select(source, e.target.value));
+  for (const m of ["level", "change"]) $("mode-" + m).addEventListener("click", () => {
+    liveMode = m;
+    for (const k of ["level", "change"]) $("mode-" + k).setAttribute("aria-pressed", String(k === m));
+    if (liveRaw) show(liveView(), true);
+  });
 
   (async () => {
     try {
-      basemap = await (await fetch("basemap.json")).json();
+      [basemap, tripsIndex] = await Promise.all([getJSON("basemap.json"), getJSON("data/trips/index.json")]);
     } catch (err) {
       $("status").textContent = "Couldn't load the base map. Reload the page to try again.";
       return;
     }
     readTheme(); resize();
-    await useSource("trips");
+    await select(location.hash === "#live" ? "live" : "trips");
   })();
 })();
 </script>
+</body>
+</html>
