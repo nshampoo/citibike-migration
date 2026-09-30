@@ -1,5 +1,9 @@
 -- Build the tables every chart reads from. Run: duckdb data/trips.duckdb < analysis/prepare.sql
--- Expects the unzipped monthly CSVs in data/raw/ and data/nta2020.geojson (NYC neighborhood boundaries).
+-- Expects the unzipped monthly CSVs in data/raw/ (NYC and JC- files), data/nta2020.geojson (NYC neighborhoods)
+-- and data/nj_place/ (Census place boundaries for New Jersey, for Jersey City and Hoboken).
+-- Stop at the first error. By default the duckdb CLI prints the error and runs the next statement,
+-- which silently leaves stale tables behind.
+.bail on
 INSTALL spatial; LOAD spatial;
 
 -- Station IDs must be read as text. DuckDB infers types per file, and in a file where every
@@ -19,12 +23,18 @@ FROM (
   SELECT end_station_id, end_station_name, end_lat, end_lng, false FROM t
 ) WHERE sid IS NOT NULL GROUP BY sid;
 
+-- Areas: NYC neighborhoods, plus Jersey City and Hoboken (the New Jersey side of Citi Bike) as
+-- one area each, grouped as borough 'New Jersey'. The two sources use different coordinate systems
+-- (WGS84 vs NAD83, about 1 m apart here), which DuckDB refuses to mix; ::GEOMETRY drops the tag.
 CREATE OR REPLACE TABLE nta AS
-SELECT ntaname AS area, boroname AS borough, geom FROM ST_Read('data/nta2020.geojson');
+SELECT ntaname AS area, boroname AS borough, geom::GEOMETRY AS geom FROM ST_Read('data/nta2020.geojson')
+UNION ALL
+SELECT NAME, 'New Jersey', geom::GEOMETRY FROM ST_Read('data/nj_place/cb_2024_34_place_500k.shp')
+WHERE NAME IN ('Jersey City', 'Hoboken');
 
--- Stations outside NYC (Jersey City/Hoboken) get borough 'NJ'.
+-- A station outside every area (none as of August 2026) is kept, labeled 'Other'.
 CREATE OR REPLACE TABLE station_area AS
-SELECT s.*, coalesce(n.area, 'Jersey City / Hoboken') AS area, coalesce(n.borough, 'NJ') AS borough
+SELECT s.*, coalesce(n.area, 'Other') AS area, coalesce(n.borough, 'Other') AS borough
 FROM stations s LEFT JOIN nta n ON ST_Contains(n.geom, ST_Point(s.lng, s.lat));
 
 -- Every bike arrival (+1) and departure (-1) at a station.

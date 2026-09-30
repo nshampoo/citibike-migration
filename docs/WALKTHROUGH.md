@@ -170,7 +170,7 @@ of each part of the city?
 | Colors from a validated palette, not matplotlib defaults | The palette is checked for color-blind separation and contrast |
 | Subtitle says "Truck rebalancing not included" and names the source | Honesty about what the data *can't* show |
 
-**What it shows:** on weekdays, the areas that fill peak at **+5,447** bikes around noon, the areas that empty
+**What it shows:** on weekdays, the areas that fill peak at **+5,454** bikes around noon, the areas that empty
 bottom out at **−4,350**, and the outer boroughs at **−2,591**. All three return to near zero
 overnight. Weekends are flatter and later.
 

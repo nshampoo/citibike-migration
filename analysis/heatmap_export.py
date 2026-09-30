@@ -1,7 +1,8 @@
 """Export the static data behind the Citi Bike Tides site (site/index.html).
 
 Writes into site/:
-  basemap.json               simplified NYC neighborhood outlines (no Staten Island: no Citi Bike there)
+  basemap.json               simplified NYC neighborhoods plus Jersey City and Hoboken (no Staten Island:
+                             no Citi Bike there)
   data/trips/YYYY-MM.json    average weekday for the month, 15-min frames: net bikes riders moved in or
                              out of each station since midnight (from trip data; needs data/trips.duckdb)
   data/trips/index.json      the months available
@@ -46,7 +47,7 @@ def trips_weekday(con, month: str) -> None:
     between = f"ts >= '{first}' AND ts < '{after}'"
     stations = con.sql("""
         SELECT sid, name, round(lat, 5) AS lat, round(lng, 5) AS lng FROM station_area
-        WHERE borough <> 'NJ' ORDER BY sid
+        WHERE borough <> 'Other' ORDER BY sid
     """).fetchall()
     index = {s[0]: i for i, s in enumerate(stations)}
     # Average weekday cumulative net per station per 15-min slot. Days with no events at a station

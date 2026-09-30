@@ -132,7 +132,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
     <select id="pick" aria-label="Month or day"></select>
     <div class="switch" role="group" aria-label="Live view" id="modes" hidden>
       <button id="mode-level" aria-pressed="true">Bikes docked</button>
-      <button id="mode-change" aria-pressed="false">Change</button>
+      <button id="mode-change" aria-pressed="false">Last hour</button>
     </div>
   </div>
   <p class="note" id="note">Loading…</p>
@@ -285,13 +285,19 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
     const A = data.frames[a], B = data.frames[b];
     return u === 0 ? A : A.map((v, i) => v + (B[i] - v) * u);
   }
+  // Heat renders at half the CSS resolution and is scaled up: it's a blur anyway, and the per-pixel
+  // color pass below is the slowest part of a frame, so this makes each frame ~4x cheaper.
+  const HEAT = 0.5;
   function paint(layer, list, lut) {
-    const hw = Math.ceil(W), hh = Math.ceil(H);  // heat renders at CSS pixels: smooth by nature, 4x cheaper
-    layer.width = hw; layer.height = hh;
-    const g = layer.getContext("2d");
-    const r = Math.max(7, Math.min(70, Math.round((260 / fit.mPerPx) * view.k)));  // ~260 m blobs
+    const hw = Math.ceil(W * HEAT), hh = Math.ceil(H * HEAT);
+    if (layer.width !== hw || layer.height !== hh) { layer.width = hw; layer.height = hh; }
+    // willReadFrequently keeps the canvas in CPU memory, so getImageData doesn't copy back from the GPU
+    const g = layer.getContext("2d", { willReadFrequently: true });
+    g.globalAlpha = 1; g.clearRect(0, 0, hw, hh);
+    const r = Math.max(4, Math.min(35, Math.round((260 / fit.mPerPx) * view.k * HEAT)));  // ~260 m blobs
     const s = makeSprite(r);
-    for (const [x, y, a] of list) {
+    for (const [x0, y0, a] of list) {
+      const x = x0 * HEAT, y = y0 * HEAT;
       if (x < -r || y < -r || x > hw + r || y > hh + r) continue;
       g.globalAlpha = a; g.drawImage(s, x - r, y - r);
     }
@@ -321,8 +327,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
       (v > 0 ? pos : neg).push([x, y, a]);
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (data.kind === "change") ctx.drawImage(paint(heat.neg, neg, luts.loss), 0, 0);
-    ctx.drawImage(paint(heat.pos, pos, luts.gain), 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    if (data.kind === "change") ctx.drawImage(paint(heat.neg, neg, luts.loss), 0, 0, W, H);
+    ctx.drawImage(paint(heat.pos, pos, luts.gain), 0, 0, W, H);
     updateClock(); drawSparkCursor();
   }
 
@@ -389,7 +396,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   function tick(now) {
     if (!playing) return;
     const perSec = (source === "trips" ? 4 : 20) * Number($("speed").value);  // frames per second
-    frame += ((now - lastTick) / 1000) * perSec; lastTick = now;
+    // At most one data frame per drawn frame: a slow screen plays slower instead of skipping minutes.
+    frame += Math.min(1, ((now - lastTick) / 1000) * perSec); lastTick = now;
     if (frame >= data.frames.length - 1) frame = 0;
     draw();
     requestAnimationFrame(tick);
@@ -505,10 +513,14 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
              since: "since midnight", spark: { label: "Bikes out on rides", sign: -1 } };
   }
 
-  // A live day = every hourly file whose start falls on that NYC date, stitched minute by minute.
+  // A live day = every hourly file whose start falls on that NYC date, stitched minute by minute,
+  // plus the hour before it (not shown) so "last hour" is right from midnight on.
   const hourCache = {};
   async function loadLiveDay(day, fresh) {
-    const hours = liveIndex.hours.filter((h) => nyDay(hourStart(h)) === day);
+    const dayHours = liveIndex.hours.filter((h) => nyDay(hourStart(h)) === day);
+    const before = liveIndex.hours[liveIndex.hours.indexOf(dayHours[0]) - 1];
+    const lead = before && hourStart(before) === hourStart(dayHours[0]) - 3600 ? [before] : [];
+    const hours = [...lead, ...dayHours];
     const last = hours[hours.length - 1];
     const docs = await Promise.all(hours.map(async (h) => {
       if (!hourCache[h] || (fresh && h === last)) hourCache[h] = await getJSON(`data/live/hours/${h}.json`, fresh && h === last);
@@ -526,24 +538,45 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
       const first = frames.find((f) => f[i] != null);
       for (const f of frames) { if (f[i] != null) break; f[i] = first ? first[i] : 0; }
     });
-    return { ids, times, frames, day };
+    const dayStart = hourStart(dayHours[0]);
+    return { ids, times, frames, day, offset: Math.max(0, times.findIndex((ts) => ts >= dayStart)) };
+  }
+  // For each minute, the frame an hour earlier (or the earliest one we have, early on).
+  function hourAgo(times) {
+    const base = new Array(times.length);
+    for (let t = 0, b = 0; t < times.length; t++) {
+      while (b + 1 <= t && times[b + 1] <= times[t] - 3600) b++;
+      base[t] = b;
+    }
+    return base;
   }
   function liveView() {
-    const { ids, times, frames, day } = liveRaw;
-    const change = liveMode === "change", start = hmLabel(times[0]);
+    const { ids, times, frames, day, offset } = liveRaw;
+    const change = liveMode === "change";
+    const shownTimes = times.slice(offset);
     const nice = longDay.format(new Date(`${day}T12:00:00Z`));
     const mins = Math.round((Date.now() / 1000 - times[times.length - 1]) / 60);
+    let shown = frames.slice(offset), early = false;
+    if (change) {
+      const base = hourAgo(times);
+      shown = shown.map((f, k) => {
+        const t = k + offset, b = frames[base[t]];
+        if (times[t] - times[base[t]] < 3540) early = true;  // under an hour of history so far
+        return f.map((v, i) => v - b[i]);
+      });
+    }
     return {
       kind: change ? "change" : "level",
-      times: times.map((ts) => hmFmt.format(new Date(ts * 1000))),
+      times: shownTimes.map((ts) => hmFmt.format(new Date(ts * 1000))),
       stations: ids.map((id) => liveStations[id]),
-      frames: change ? frames.map((f) => f.map((v, i) => v - frames[0][i])) : frames,
+      frames: shown,
       dayLabel: `Live · ${nice}`,
-      legendTitle: `Bikes gained or lost since ${start}`,
-      since: `since ${start}`,
-      spark: change ? { label: `Bikes away from docks vs. ${start}`, sign: -1 } : { label: "Bikes docked citywide", sign: 1 },
-      note: `${times.length} one-minute snapshots from ${start} to ${hmLabel(times[times.length - 1])}` +
-            (mins <= 15 ? `, updated ${mins <= 1 ? "just now" : `${mins} min ago`}.` : "."),
+      legendTitle: "Bikes gained or lost over the previous hour",
+      since: "in the last hour",
+      spark: change ? { label: "Net bikes undocked over the previous hour", sign: -1 } : { label: "Bikes docked citywide", sign: 1 },
+      note: `${shownTimes.length} one-minute snapshots from ${hmLabel(shownTimes[0])} to ${hmLabel(shownTimes[shownTimes.length - 1])}` +
+            (mins <= 15 ? `, updated ${mins <= 1 ? "just now" : `${mins} min ago`}.` : ".") +
+            (change && early ? ` Until there's an hour of history, minutes compare with the earliest snapshot (${hmLabel(times[0])}).` : ""),
     };
   }
   function hmLabel(ts) { const { t, ampm } = fmt(hmFmt.format(new Date(ts * 1000))); return `${t} ${ampm}`; }
