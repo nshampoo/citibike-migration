@@ -9,6 +9,7 @@ way, and what it taught us. Read it top to bottom once. After that it works as a
 - [Lecture 4: The live collector (`collector/`)](#lecture-4-the-live-collector-collector)
 - [Lecture 5: Infrastructure as code with CDK (`infra/`)](#lecture-5-infrastructure-as-code-with-cdk-infra)
 - [Lecture 6: Repo hygiene](#lecture-6-repo-hygiene)
+- [Lecture 7: The website (`site/`, the builder, `CitibikeSite`)](#lecture-7-the-website-site-the-builder-citibikesite)
 - [Known limitations](#known-limitations)
 - [Homework](#homework)
 - [Glossary](#glossary)
@@ -352,6 +353,92 @@ Each test protects a guarantee from an earlier lecture. If a future edit breaks 
 
 ---
 
+## Lecture 7: The website (`site/`, the builder, `CitibikeSite`)
+
+### Why a builder sits between the data and the page
+
+A browser can't read the raw snapshots directly: one day is 1,440 files, about 100 MB. So a second
+Lambda, the **builder** (`collector/builder/handler.py`), runs every 5 minutes and packs them into
+files a page can load quickly:
+
+| File | What it holds | Size |
+|---|---|---|
+| `data/live/hours/2026-09-30T13.json` | every station's bike count for each minute of one UTC hour | ~600 KB (~100 KB compressed) |
+| `data/live/stations.json` | name and location of every station ever seen | ~200 KB |
+| `data/trucks/2026-09-30.json` | that night's van stops | ~5 KB |
+| `data/live/index.json`, `data/trucks/index.json` | what hours and nights exist | tiny |
+
+The page reads the index files first, then only the files for the day you pick. This is the "store
+raw, serve derived" pattern again: the raw bucket stays the source of truth, and everything under
+`data/` in the site bucket can be rebuilt from it at any time (`{"backfill_hours": N}`).
+
+### `infra/lib/site-stack.ts`: the pieces
+
+- **A private bucket behind CloudFront.** The bucket blocks all public access. CloudFront signs its
+  requests (Origin Access Control), and the bucket policy admits only this distribution. Visitors
+  get HTTPS, compression (JSON shrinks about 5×), and caching at edge locations.
+- **`BucketDeployment` with `prune: false`.** Each `cdk deploy` uploads `site/`. By default it also
+  *deletes* anything in the bucket that isn't in `site/`, which would wipe the builder's files every
+  deploy. A test pins `prune: false`.
+- **A different removal policy from the collector.** The site bucket is `DESTROY` with
+  `autoDeleteObjects`: everything in it is rebuildable. The raw bucket is `RETAIN`: nothing can rebuild it.
+  Same resource type, opposite settings, because the data's value differs.
+- **Least privilege, again.** The builder can *read* the raw bucket (never write or delete) and write
+  only `data/live/*` and `data/trucks/*` in the site bucket. When the Trucks tab was added, the
+  first diff showed the builder had no permission for `data/trucks/`: its writes would have been
+  denied at 12:05 AM. Reading `cdk diff` before deploying caught it, and a test now checks it.
+- **A separate stack.** `CitibikeSite` can be torn down and rebuilt without touching `CitibikeCollector`.
+  It gets the raw bucket through a prop (`rawBucket: collector.bucket`), and CDK wires up the
+  cross-stack reference as a CloudFormation export.
+
+### The Trucks tab: finding vans in the data
+
+Between midnight and 6 AM almost nobody rides, so a station that gains or loses **8+ bikes within
+10 minutes** is almost certainly a van. The builder:
+
+1. Takes the night's minute data (midnight to 6 AM, **New York time**) and splits it into 10-minute windows.
+2. Flags any station whose count changed by 8+ within a window.
+3. Merges back-to-back flagged windows moving the same way into one stop. A van loading for 15
+   minutes spans two windows. Many merged stops come to about 20 bikes, which looks like one van load.
+
+Two details worth knowing:
+
+- **"Midnight in New York" is computed, not looked up.** The builder applies the US daylight-saving
+  rule (second Sunday of March to first Sunday of November) instead of relying on the time zone
+  database being present in Lambda's OS. The page uses the same rule at the same instant, so the two
+  agree even on the nights the clocks change.
+- **It was checked against an independent analysis.** The Sep 30 night was first analyzed in DuckDB
+  (`data/day1.duckdb`). The builder's Python version reproduces it exactly: 47 stops, +398 / −264.
+
+It's labeled a **proof of concept** on the site because the rule is a first guess: smaller van stops
+are missed, and a group of late riders could be mistaken for a van.
+
+### `site/index.html`: one page, three views
+
+It's a single HTML file with no framework. Two drawing modes share one map:
+
+- **Heat** (Live, Average weekday): each station paints a soft blob into an off-screen canvas;
+  overlapping blobs build up, and a lookup table turns the build-up into color. Blue means gaining
+  bikes, red means losing.
+- **Bursts** (Trucks): each van stop is a circle sized by the square root of its bike count, so area,
+  not radius, tracks the number of bikes.
+
+Performance lessons from making playback smooth:
+
+- **Render the heat at half resolution.** The per-pixel color pass is the slow part, and heat is a
+  blur anyway. This cut a redraw from 18.9 ms to 4.2 ms.
+- **`willReadFrequently: true`** on a canvas you read pixels from. Without it, browsers keep the canvas
+  on the GPU and pay for a slow copy on every read.
+- **Never skip frames.** Playback advances at most one data frame per drawn frame, so a slow device
+  plays slower instead of jumping 3 minutes at a time.
+
+On phones (≤ 640 px) the page stops floating panels over the map: only the clock and zoom buttons stay
+on it, and the legend, Trucks panel and note move below the timeline. Testing tip: headless Chrome won't
+render narrower than 500 px and silently crops screenshots, so test phone widths inside a 390 px
+`<iframe>` instead.
+
+---
+
 ## Known limitations
 
 Things that are true today and worth knowing before publishing anything:
@@ -361,12 +448,15 @@ Things that are true today and worth knowing before publishing anything:
    a pattern, but it's circular if presented as a *prediction*.
 2. **One month, in summer.** August has vacations and good weather. Winter will look different.
 3. **Trips with no end station** (about 476/day) are counted as departures only.
-4. **Jersey City is half-loaded.** Trips starting there are in separate `JC-` files.
+4. **Van detection is a first guess** (the Trucks tab's "proof of concept" label). One night of data;
+   the thresholds haven't been tuned against known truck routes.
 5. **"Snapshot at :00" means about :00.** The Lambda runs within seconds of the minute, and the feed
    itself can be up to 60 s old. That's fine for hourly totals. It's worth remembering when
    comparing with trip timestamps.
-6. **Timestamps don't match yet:** trip files are New York local time, while snapshots are UTC.
-   The first analysis that joins them must convert one to the other.
+6. **Timestamps differ by source:** trip files are New York local time, while snapshots and hourly
+   files are UTC (the page converts for display). Any analysis joining them must convert one to the other.
+7. **August is a quiet month.** September 30's live tide ran about 1.3× the August weekday average in
+   every zone. Compare like with like: the same month, or the same weekday.
 
 ---
 
