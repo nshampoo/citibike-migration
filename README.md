@@ -4,6 +4,26 @@ Where do Citi Bikes go over a day? Station-level "migration" across NYC, from pu
 and live snapshots of the Citi Bike feed. Plan and open decisions: [DESIGN.md](DESIGN.md).
 How the code works and why: [docs/WALKTHROUGH.md](docs/WALKTHROUGH.md).
 
+## Live site
+
+**https://d2g10dtmnepqv0.cloudfront.net** (open straight to live data: [/#live](https://d2g10dtmnepqv0.cloudfront.net/#live))
+
+An animated heatmap of NYC, Jersey City and Hoboken. *Average weekday* plays a month of trip data;
+*Live* plays today's 1-minute snapshots (bikes docked, or change over the last hour) and updates
+every 5 minutes.
+
+## What's running in AWS
+
+Account `404933715334`, `us-east-1`, CLI profile `personal`. Both stacks are CDK code in [`infra/`](infra/).
+
+| Stack | What it does |
+|---|---|
+| `CitibikeCollector` | Saves the Citi Bike feed every minute to S3. The raw bucket is kept even if the stack is deleted. |
+| `CitibikeSite` | The site: CloudFront, its bucket, and a builder that packs new snapshots into hourly files every 5 minutes. |
+
+Update the site after editing `site/` (from `infra/`): `npx cdk deploy CitibikeSite`.
+Add a trip month: load it (below), run `.venv/bin/python analysis/heatmap_export.py --month YYYY-MM`, then deploy.
+
 ![Weekday tide](output/tide_2026-08.png)
 
 ## Reproduce the August 2026 charts
