@@ -4,8 +4,9 @@ import { CollectorStack } from '../lib/collector-stack';
 
 const app = new cdk.App();
 
-// Override without editing code: `cdk diff -c snapshotMinutes=2`
-const snapshotMinutes = Number(app.node.tryGetContext('snapshotMinutes') ?? 5);
+// 1 min matches the feed's own refresh rate; coarser views are a filter later, finer never.
+// Try another value without editing code: `cdk diff -c snapshotMinutes=5` (applies to that one command only).
+const snapshotMinutes = Number(app.node.tryGetContext('snapshotMinutes') ?? 1);
 
 new CollectorStack(app, 'CitibikeCollector', {
   env: { account: '404933715334', region: 'us-east-1' },
